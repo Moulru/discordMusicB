@@ -1,8 +1,8 @@
+import os
 import discord
 from discord.ext import commands
 import yt_dlp
 import asyncio
-import os
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -19,32 +19,34 @@ async def check_queue(ctx):
     if voice_client and len(queue) > 0:
         current_song = queue.pop(0)  # 대기열에서 첫 번째 노래를 꺼냄
 
-        # 환경 변수에서 쿠키 텍스트 가져오기
         cookies_data = os.getenv("YOUTUBE_COOKIES")
-        if not cookies_data:
-            await ctx.send("쿠키 데이터가 설정되지 않았습니다. 환경 변수를 확인해주세요.")
-            return
-
-        # 쿠키 텍스트를 파일처럼 사용할 수 있도록 변환
-        cookies = [{"name": line.split("=", 1)[0], "value": line.split("=", 1)[1]} for line in cookies_data.split(";")]
+        if cookies_data:
+            cookies = [{"name": line.split("=", 1)[0], "value": line.split("=", 1)[1]} 
+                       for line in cookies_data.split(";") if "=" in line]
+        else:
+            cookies = []
 
         ydl_opts = {
             "format": "bestaudio/best",
             "noplaylist": True,
             "quiet": True,
-            "cookies": cookies,  # 쿠키를 직접 전달
+            "cookies": cookies,
             "headers": {
                 "User-Agent": "Mozilla/5.0"
             },
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(f"ytsearch:{current_song}", download=False)
-            if not info["entries"]:
-                await ctx.send("검색 결과가 없습니다.")
+            try:
+                info = ydl.extract_info(f"ytsearch:{current_song}", download=False)
+                if not info["entries"]:
+                    await ctx.send("검색 결과가 없습니다.")
+                    return
+                url = info["entries"][0]["url"]
+                current_song = info["entries"][0]["title"]
+            except Exception as e:
+                await ctx.send(f"에러가 발생했습니다: {str(e)}")
                 return
-            url = info["entries"][0]["url"]
-            current_song = info["entries"][0]["title"]
 
         ffmpeg_options = {
             "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
@@ -102,7 +104,6 @@ async def list(ctx):
     queue_list += "\n".join([f"{index + 1}. {song}" for index, song in enumerate(queue)])
     await ctx.send(f"대기열:\n{queue_list}")
 
-# Discord 봇 토큰 가져오기
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 if not TOKEN:
     raise ValueError("DISCORD_BOT_TOKEN 환경 변수를 설정해주세요!")
