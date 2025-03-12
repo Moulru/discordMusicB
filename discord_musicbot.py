@@ -19,18 +19,20 @@ async def check_queue(ctx):
     if voice_client and len(queue) > 0:
         current_song = queue.pop(0)  # 대기열에서 첫 번째 노래를 꺼냄
 
-        cookies_data = os.getenv("YOUTUBE_COOKIES")
-        if cookies_data:
-            cookies = [{"name": line.split("=", 1)[0], "value": line.split("=", 1)[1]} 
-                       for line in cookies_data.split(";") if "=" in line]
-        else:
-            cookies = []
+        # 로그인 정보 (이메일, 비밀번호)
+        email = os.getenv("YOUTUBE_EMAIL")
+        password = os.getenv("YOUTUBE_PASSWORD")
+
+        if not email or not password:
+            await ctx.send("로그인 정보가 설정되지 않았습니다.")
+            return
 
         ydl_opts = {
             "format": "bestaudio/best",
             "noplaylist": True,
             "quiet": True,
-            "cookies": cookies,
+            "username": email,  # 구글 이메일
+            "password": password,  # 구글 비밀번호
             "headers": {
                 "User-Agent": "Mozilla/5.0"
             },
