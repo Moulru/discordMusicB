@@ -26,7 +26,7 @@ class LavalinkBot(commands.Bot):
             bot=self,
             host='your-lavalink-server-url',  # Lavalink 서버 주소
             port=2333,  # Lavalink 서버 포트
-            password='youshallnotpass'  # Lavalink 서버 비밀번호
+            password='1234'  # Lavalink 서버 비밀번호
         )
 
 bot = LavalinkBot(command_prefix="!", intents=intents)
