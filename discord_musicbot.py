@@ -1,7 +1,6 @@
-import os
 import discord
 from discord.ext import commands
-import yt_dlp
+import wavelink
 import asyncio
 
 intents = discord.Intents.default()
@@ -12,102 +11,104 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 queue = []  # 대기열을 저장할 리스트
 current_song = None  # 현재 재생 중인 노래
 
-# 노래가 끝나면 다음 노래를 재생하는 함수
-async def check_queue(ctx):
-    global current_song
-    voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
-    if voice_client and len(queue) > 0:
-        current_song = queue.pop(0)  # 대기열에서 첫 번째 노래를 꺼냄
+# Lavalink 연결
+class LavalinkBot(commands.Bot):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.add_cog(MusicCog(self))
 
-        # 로그인 정보 (이메일, 비밀번호)
-        email = os.getenv("YOUTUBE_EMAIL")
-        password = os.getenv("YOUTUBE_PASSWORD")
+    async def on_ready(self):
+        await bot.wait_until_ready()
+        await self.connect_to_lavalink()
 
-        if not email or not password:
-            await ctx.send("로그인 정보가 설정되지 않았습니다.")
+    async def connect_to_lavalink(self):
+        await wavelink.NodePool.create_node(
+            bot=self,
+            host='your-lavalink-server-url',  # Lavalink 서버 주소
+            port=2333,  # Lavalink 서버 포트
+            password='youshallnotpass'  # Lavalink 서버 비밀번호
+        )
+
+bot = LavalinkBot(command_prefix="!", intents=intents)
+
+class MusicCog(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+    @commands.command()
+    async def play(self, ctx, *, search: str = None):
+        global current_song
+
+        if not search:
+            await ctx.send("검색어를 입력해주세요!")
             return
 
-        ydl_opts = {
-            "format": "bestaudio/best",
-            "noplaylist": True,
-            "quiet": True,
-            "username": email,  # 구글 이메일
-            "password": password,  # 구글 비밀번호
-            "headers": {
-                "User-Agent": "Mozilla/5.0"
-            },
-        }
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send("음성 채널에 먼저 들어가 주세요!")
+            return
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                info = ydl.extract_info(f"ytsearch:{current_song}", download=False)
-                if not info["entries"]:
-                    await ctx.send("검색 결과가 없습니다.")
-                    return
-                url = info["entries"][0]["url"]
-                current_song = info["entries"][0]["title"]
-            except Exception as e:
-                await ctx.send(f"에러가 발생했습니다: {str(e)}")
+        voice_channel = ctx.author.voice.channel
+        voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+
+        if not voice_client:
+            voice_client = await voice_channel.connect()
+
+        # Lavalink 음성 연결을 설정
+        player = await voice_channel.connect_to_lavalink()
+
+        if player.is_playing():
+            queue.append(search)
+            await ctx.send(f"현재 재생 중인 노래가 있습니다. '{search}'을 예약합니다.")
+            return
+
+        queue.insert(0, search)
+        await self.check_queue(ctx)
+
+    async def check_queue(self, ctx):
+        global current_song
+        if len(queue) > 0:
+            current_song = queue.pop(0)
+            player = await wavelink.Player.get(ctx.guild.id)
+
+            # 노래 검색
+            track = await wavelink.YouTubeTrack.search(current_song)
+
+            if not track:
+                await ctx.send("검색 결과가 없습니다.")
                 return
 
-        ffmpeg_options = {
-            "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-            "options": "-vn -tune zerolatency"
-        }
+            current_song = track[0].title
+            await ctx.send(f"🎵 {current_song} 재생 중!")
 
-        def after_playing(error):
-            asyncio.run_coroutine_threadsafe(check_queue(ctx), bot.loop)
+            # 음악 재생
+            await player.play(track[0])
 
-        voice_client.play(discord.FFmpegPCMAudio(url, **ffmpeg_options), after=after_playing)
-        await ctx.send(f"🎵 {current_song} 재생 중!")
+            # 음악이 끝났을 때 다음 곡 재생
+            player.add_listener(self.after_playing)
 
-@bot.command()
-async def play(ctx, *, search: str = None):
-    global current_song
-    if not search:
-        await ctx.send("검색어를 입력해주세요!")
-        return
+    async def after_playing(self, player):
+        await self.check_queue(ctx)
 
-    if not ctx.author.voice or not ctx.author.voice.channel:
-        await ctx.send("음성 채널에 먼저 들어가 주세요!")
-        return
+    @commands.command()
+    async def skip(self, ctx):
+        player = await wavelink.Player.get(ctx.guild.id)
+        if player.is_playing():
+            await player.stop()
+            await ctx.send("현재 노래를 스킵하고 다음 노래를 재생합니다.")
+            await self.check_queue(ctx)
+        else:
+            await ctx.send("현재 재생 중인 노래가 없습니다.")
 
-    voice_channel = ctx.author.voice.channel
-    voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+    @commands.command()
+    async def list(self, ctx):
+        if not queue and not current_song:
+            await ctx.send("현재 재생 중인 노래와 대기열이 없습니다.")
+            return
 
-    if not voice_client:
-        voice_client = await voice_channel.connect()
+        queue_list = f"현재 재생 중: {current_song}\n"
+        queue_list += "\n".join([f"{index + 1}. {song}" for index, song in enumerate(queue)])
+        await ctx.send(f"대기열:\n{queue_list}")
 
-    if voice_client.is_playing():
-        queue.append(search)
-        await ctx.send(f"현재 재생 중인 노래가 있습니다. 다음 노래 '{search}'을 예약합니다.")
-        return
-
-    queue.insert(0, search)
-    await check_queue(ctx)
-
-@bot.command()
-async def skip(ctx):
-    voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
-    if voice_client and voice_client.is_playing():
-        voice_client.stop()
-        await ctx.send("현재 노래를 스킵하고 다음 노래를 재생합니다.")
-        await check_queue(ctx)
-    else:
-        await ctx.send("현재 재생 중인 노래가 없습니다.")
-
-@bot.command()
-async def list(ctx):
-    if not queue and not current_song:
-        await ctx.send("현재 재생 중인 노래와 대기열이 없습니다.")
-        return
-
-    queue_list = f"현재 재생 중: {current_song}\n"
-    queue_list += "\n".join([f"{index + 1}. {song}" for index, song in enumerate(queue)])
-    await ctx.send(f"대기열:\n{queue_list}")
-
-TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-if not TOKEN:
-    raise ValueError("DISCORD_BOT_TOKEN 환경 변수를 설정해주세요!")
-
+# 봇 실행
+TOKEN = "YOUR_DISCORD_BOT_TOKEN"
 bot.run(TOKEN)
