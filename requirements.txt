@@ -1,1 +1,5 @@
-pip install -U discord.py yt-dlp ffmpeg aiohttp PyNaCl
+discord.py
+yt-dlp
+ffmpeg
+aiohttp
+PyNaCl
