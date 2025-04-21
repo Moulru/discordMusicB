@@ -1,4 +1,1 @@
-discord.py
-ffmpeg
-PyNaCl
-wavelink
+pip install -U discord.py yt-dlp ffmpeg aiohttp PyNaCl
