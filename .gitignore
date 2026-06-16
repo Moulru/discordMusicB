@@ -1,0 +1,29 @@
+# 보안/환경 파일
+config.py
+.env
+.dev.vars
+*.pem
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Node / Wrangler
+node_modules/
+.wrangler/
+.miniflare/
+web/dist/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+.localized
+Thumbs.db
+
+# 개인 메모/트러블슈팅 노트
+web/README_DEPLOY.md

@@ -1,0 +1,18 @@
+{
+  "name": "ayaya-playlist",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "rm -rf dist && mkdir -p dist && npx esbuild src/index.ts --bundle --format=esm --outfile=dist/_worker.js --platform=neutral --target=es2022 --conditions=worker,browser && cp static/index.html dist/index.html",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name=ayaya-playlist",
+    "db:apply": "wrangler d1 execute ayaya_playlist --remote --file=./migrations/0001_init.sql",
+    "db:seed": "wrangler d1 execute ayaya_playlist --remote --file=./migrations/0002_seed.sql",
+    "db:reset_password": "wrangler d1 execute ayaya_playlist --remote --command=\"DELETE FROM auth;\""
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240614.0",
+    "esbuild": "^0.28.0",
+    "typescript": "^5.4.0",
+    "wrangler": "^4.0.0"
+  }
+}

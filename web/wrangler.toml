@@ -1,0 +1,15 @@
+# 2026-05-17: Cloudflare Pages — 웹 플레이리스트 관리 (Advanced Mode, _worker.js)
+name = "ayaya-playlist"
+pages_build_output_dir = "./dist"
+compatibility_date = "2026-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+# D1 데이터베이스
+[[d1_databases]]
+binding = "DB"
+database_name = "ayaya_playlist"
+database_id = "REPLACE_WITH_DB_ID_AFTER_CREATE"
+
+# 환경변수 (secret은 별도로 wrangler pages secret put으로 등록)
+[vars]
+SESSION_TTL_HOURS = "24"
